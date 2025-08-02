@@ -120,21 +120,24 @@ export const produce = async (
     try {
         const transport = transports.get(`${socket.id}-producer`);
 
-        if (producers.has(socket.id)) {
-            console.log("Producer already exists for this socket");
-            const oldProducer = producers.get(socket.id);
-            if (oldProducer?.producer) {
-
-                oldProducer.producer.close();
-            }
-            producers.delete(socket.id);
-        }
-
         if (!transport) {
             throw new Error("Producer transport not found");
         }
 
-        console.log(`Creating producer for socket: ${socket.id}, kind: ${kind}`);
+        // Create a unique key for this producer (socket + kind)
+        const producerKey = `${socket.id}-${kind}`;
+
+        // Close existing producer of the same kind if it exists
+        if (producers.has(producerKey)) {
+            console.log(`Producer already exists for ${producerKey}, closing old one`);
+            const oldProducer = producers.get(producerKey);
+            if (oldProducer?.producer) {
+                oldProducer.producer.close();
+            }
+            producers.delete(producerKey);
+        }
+
+        console.log(`Creating ${kind} producer for socket: ${socket.id}`);
         const producer = await transport.produce({kind, rtpParameters});
 
         if (producer.paused) {
@@ -142,21 +145,30 @@ export const produce = async (
             console.log(`Producer ${producer.id} resumed`);
         }
 
-        console.log(`Producer created: ${producer.id} for ${socket.id}`);
+        console.log(`${kind} producer created: ${producer.id} for ${socket.id}`);
 
-
+        // Broadcast new producer to other clients
         socket.broadcast.emit("newProducer", {
             producerId: producer.id,
             socketId: socket.id,
+            kind: kind
         });
 
-        producers.set(socket.id, {producer, producerId: producer.id});
-        const live = await startLive(socket);
+        // Store producer with kind-specific key
+        producers.set(producerKey, {producer, producerId: producer.id, kind});
 
-        socket.broadcast.emit("newStreamer", {
-            id: socket.id,
-            url: `/hls/${socket.id}/playlist.m3u8`,
-        })
+        // Start HLS streaming if this is video
+        if (kind === 'video') {
+            try {
+                await startLive(socket);
+                socket.broadcast.emit("newStreamer", {
+                    id: socket.id,
+                    url: `/hls/${socket.id}/playlist.m3u8`,
+                });
+            } catch (error) {
+                console.error("Error starting HLS stream:", error);
+            }
+        }
 
         callback({id: producer.id});
     } catch (error) {
@@ -173,33 +185,41 @@ export const consume = async (
     try {
         console.log(`Attempting to consume producer ${producerId} for socket ${socket.id}`);
 
-        if (consumers.has(socket.id)) {
-            console.log("Consumer already exists for this socket, cleaning up");
-            const oldConsumer = consumers.get(socket.id);
+        // Find the producer data
+        const producerEntry = Array.from(producers.entries()).find(
+            ([key, data]) => data.producerId === producerId
+        );
+
+        if (!producerEntry) {
+            throw new Error(`Producer ${producerId} not found`);
+        }
+
+        const [producerKey, producerData] = producerEntry;
+        const { producer, kind } = producerData;
+
+        // Create a unique consumer key
+        const consumerKey = `${socket.id}-${producerId}`;
+
+        // Clean up existing consumer if it exists
+        if (consumers.has(consumerKey)) {
+            console.log(`Consumer already exists for ${consumerKey}, cleaning up`);
+            const oldConsumer = consumers.get(consumerKey);
             if (oldConsumer?.consumer) {
                 oldConsumer.consumer.close();
             }
-            consumers.delete(socket.id);
+            consumers.delete(consumerKey);
         }
 
         const transport = transports.get(`${socket.id}-consumer`);
-        const producerData = Array.from(producers.values()).find(
-            (producer) => producer.producerId === producerId
-        );
 
         if (!transport) {
             throw new Error(`Consumer transport not found for socket ${socket.id}`);
-        }
-
-        if (!producerData) {
-            throw new Error(`Producer ${producerId} not found`);
         }
 
         if (!socket.rtpCapabilities) {
             throw new Error(`RTP capabilities not set on socket ${socket.id}`);
         }
 
-        const {producer} = producerData;
         const consumerRtpCapabilities = socket.rtpCapabilities;
 
         // Check if this router can consume this producer
@@ -212,19 +232,16 @@ export const consume = async (
             throw new Error(`Cannot consume producer ${producerId} - incompatible RTP capabilities`);
         }
 
-        console.log(`Router can consume producer ${producerId}, creating consumer...`);
-
-        // Check transport connection state
-        // console.log(`Transport connection state: ${transport.connectionState.}`);
+        console.log(`Router can consume ${kind} producer ${producerId}, creating consumer...`);
 
         const consumer = await transport.consume({
             producerId: producer.id,
             rtpCapabilities: consumerRtpCapabilities as mediasoup.types.RtpCapabilities,
         });
 
-        consumers.set(socket.id, {consumer, consumerId: consumer.id});
+        consumers.set(consumerKey, {consumer, consumerId: consumer.id, kind});
 
-        console.log(`Consumer created: ${consumer.id} for socket ${socket.id} (producer: ${producerId})`);
+        console.log(`${kind} consumer created: ${consumer.id} for socket ${socket.id} (producer: ${producerId})`);
         console.log(`Consumer paused state: ${consumer.paused}`);
 
         callback({
@@ -247,23 +264,23 @@ export const resumeConsumer = async (
     try {
         console.log(`⏯️ Attempting to resume consumer ${consumerId} for socket ${id}`);
 
-        const consumerData = consumers.get(id);
+        // Find the consumer by consumerId
+        const consumerEntry = Array.from(consumers.entries()).find(
+            ([key, data]) => data.consumerId === consumerId
+        );
 
-        if (!consumerData) {
-            throw new Error(`Consumer not found for socket ${id}`);
+        if (!consumerEntry) {
+            throw new Error(`Consumer ${consumerId} not found for socket ${id}`);
         }
 
-        if (consumerData.consumerId !== consumerId) {
-            throw new Error(`Consumer ID mismatch. Expected: ${consumerData.consumerId}, Got: ${consumerId}`);
-        }
-
-        const {consumer} = consumerData;
+        const [consumerKey, consumerData] = consumerEntry;
+        const { consumer, kind } = consumerData;
 
         if (consumer.paused) {
             await consumer.resume();
-            console.log(`Consumer ${consumerId} resumed for socket ${id}`);
+            console.log(`${kind} consumer ${consumerId} resumed for socket ${id}`);
         } else {
-            console.log(`ℹConsumer ${consumerId} was already resumed for socket ${id}`);
+            console.log(`ℹ ${kind} consumer ${consumerId} was already resumed for socket ${id}`);
         }
 
         callback({success: true});
@@ -277,20 +294,21 @@ export const getProducers = async (callback: any, id: string) => {
     try {
         console.log(`Getting producers list for socket ${id}`);
 
-        const currentProducer = producers.get(id);
+        // Get all producers except those from the requesting socket
         const producerList = Array.from(producers.entries())
-            .filter(([socketId, data]) => {
-                const isOwnProducer = socketId === id;
-                const isSameProducer = data.producerId === currentProducer?.producerId;
-                return !isOwnProducer && !isSameProducer;
+            .filter(([key, data]) => {
+                // Extract socket ID from the key (format: socketId-kind)
+                const socketId = key.split('-')[0];
+                return socketId !== id;
             })
-            .map(([socketId, data]) => ({
+            .map(([key, data]) => ({
                 producerId: data.producerId,
-                socketId: socketId,
+                socketId: key.split('-')[0], // Extract socket ID from key
+                kind: data.kind
             }));
 
         console.log(`Returning ${producerList.length} producers for socket ${id}:`,
-            producerList.map(p => `${p.producerId} (from ${p.socketId})`));
+            producerList.map(p => `${p.producerId} (${p.kind} from ${p.socketId})`));
 
         callback({producerList});
     } catch (error) {
@@ -299,10 +317,8 @@ export const getProducers = async (callback: any, id: string) => {
     }
 };
 
-
 export async function startLive(socket: any) {
     try {
-
         const publicDir = path.join(process.cwd(), 'public');
         const hlsDir = path.join(publicDir, 'hls');
         const socketDir = path.join(hlsDir, socket.id);
@@ -319,11 +335,13 @@ export async function startLive(socket: any) {
             fs.mkdirSync(socketDir, { recursive: true });
         }
 
-        const prod = producers.get(socket.id);
-        if (!prod) {
-            throw new Error(`No producer found for socket ${socket.id}`);
-        }
+        // Look for video producer
+        const videoProducerKey = `${socket.id}-video`;
+        const videoProd = producers.get(videoProducerKey);
 
+        if (!videoProd) {
+            throw new Error(`No video producer found for socket ${socket.id}`);
+        }
 
         const connection = await router.createPlainTransport({
             listenIp: { ip: '127.0.0.1' },
@@ -335,12 +353,12 @@ export async function startLive(socket: any) {
         const routerRtpCapabilities = router.rtpCapabilities;
 
         const consumer = await connection.consume({
-            producerId: prod.producerId,
+            producerId: videoProd.producerId,
             paused: true,
             rtpCapabilities: routerRtpCapabilities
         });
 
-        liveConsumers.set(`${prod.producerId}`, {
+        liveConsumers.set(`${videoProd.producerId}`, {
             consumer: consumer,
             consumerId: consumer.id,
             connection: connection,
@@ -369,23 +387,19 @@ export async function startLive(socket: any) {
         const mimeType = codec.mimeType;
         const clockRate = codec.clockRate;
 
-        const isVideo = prod.producer.kind === 'video';
-        const isAudio = prod.producer.kind === 'audio';
-
         const sdpContent = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=MediaSoup Stream
 c=IN IP4 127.0.0.1
 t=0 0
-m=${isVideo ? 'video' : 'audio'} ${ffmpegListenRtpPort} RTP/AVP ${payloadType}
-a=rtpmap:${payloadType} ${mimeType.split('/')[1]}/${clockRate}${isAudio && codec.channels ? '/' + codec.channels : ''}
+m=video ${ffmpegListenRtpPort} RTP/AVP ${payloadType}
+a=rtpmap:${payloadType} ${mimeType.split('/')[1]}/${clockRate}
 a=sendonly
 `;
 
         const sdpPath = path.join(socketDir, 'stream.sdp');
         fs.writeFileSync(sdpPath, sdpContent);
         console.log(`SDP file created at: ${sdpPath}`);
-        console.log(`SDP content:\n${sdpContent}`);
 
         let ffmpegArgs = [
             '-loglevel', 'debug',
@@ -393,36 +407,20 @@ a=sendonly
             '-fflags', '+genpts',
             '-thread_queue_size', '1024',
             '-i', sdpPath,
-        ];
-
-        if (isVideo) {
-            ffmpegArgs.push(
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                '-profile:v', 'baseline',
-                '-level', '3.0',
-                '-pix_fmt', 'yuv420p',
-                '-r', '25',
-                '-g', '50',
-                '-keyint_min', '25',
-                '-sc_threshold', '0',
-                '-b:v', '1000k',
-                '-maxrate', '1000k',
-                '-bufsize', '2000k',
-                '-an'
-            );
-        } else if (isAudio) {
-            ffmpegArgs.push(
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-ar', '48000',
-                '-ac', '2',
-                '-vn'
-            );
-        }
-
-        ffmpegArgs.push(
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-tune', 'zerolatency',
+            '-profile:v', 'baseline',
+            '-level', '3.0',
+            '-pix_fmt', 'yuv420p',
+            '-r', '25',
+            '-g', '50',
+            '-keyint_min', '25',
+            '-sc_threshold', '0',
+            '-b:v', '1000k',
+            '-maxrate', '1000k',
+            '-bufsize', '2000k',
+            '-an', // No audio for video-only HLS
             '-f', 'hls',
             '-hls_time', '2',
             '-hls_list_size', '5',
@@ -432,9 +430,9 @@ a=sendonly
             '-hls_segment_filename', path.join(socketDir, 'segment_%03d.ts'),
             '-start_number', '0',
             path.join(socketDir, 'playlist.m3u8')
-        );
+        ];
 
-        console.log(`Starting FFmpeg for ${isVideo ? 'video' : 'audio'} stream from socket ${socket.id}`);
+        console.log(`Starting FFmpeg for video stream from socket ${socket.id}`);
         console.log(`FFmpeg args:`, ffmpegArgs.join(' '));
 
         const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
@@ -452,11 +450,11 @@ a=sendonly
 
         ffmpeg.on('close', (code) => {
             console.log(`FFmpeg process for socket ${socket.id} exited with code ${code}`);
-            const consumerData = liveConsumers.get(`${prod.producerId}`);
+            const consumerData = liveConsumers.get(`${videoProd.producerId}`);
             if (consumerData) {
                 consumerData.consumer?.close();
                 consumerData.connection?.close();
-                liveConsumers.delete(`${prod.producerId}`);
+                liveConsumers.delete(`${videoProd.producerId}`);
             }
         });
 
@@ -466,7 +464,7 @@ a=sendonly
 
         setTimeout(async () => {
             try {
-                console.log(`Resuming consumer for producer ${prod.producerId}`);
+                console.log(`Resuming consumer for producer ${videoProd.producerId}`);
                 await consumer.resume();
                 console.log(`Consumer resumed successfully for socket ${socket.id}`);
 
@@ -495,7 +493,7 @@ a=sendonly
             playlistPath: `/hls/${socket.id}/playlist.m3u8`,
             hlsDirectory: socketDir,
             socketId: socket.id,
-            mediaType: isVideo ? 'video' : 'audio'
+            mediaType: 'video'
         };
 
     } catch (e) {
@@ -532,4 +530,3 @@ export async function stopAllLiveStreams() {
         console.error('Error stopping all live streams:', e);
     }
 }
-

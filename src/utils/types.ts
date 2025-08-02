@@ -5,6 +5,10 @@ export interface RemoteStream {
     socketId?: string;
     producerId?: string;
     consumer?: Consumer;
+    tracks?: {
+        video?: MediaStreamTrack;
+        audio?: MediaStreamTrack;
+    };
 }
 
 export type Streamer = {

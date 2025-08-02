@@ -10,12 +10,12 @@ import {
     startStreaming,
 } from "./utils";
 import RemoteVideo from "@/components/RemoteVideo";
+import {RemoteStream} from "@/utils/types";
 
 function page() {
     const { socket } = useContext(SocketContext);
     const [isInitialized, setIsInitialized] = useState(false);
     const [, setError] = useState<string | null>(null);
-    // const [producerTransport, setProducerTransport] = useState<any>(null);
     const [consumerTransport, setConsumerTransport] = useState<any>(null);
     const [remoteStreams, setRemoteStreams] = useState<any[]>([]);
     const localStreamRef = useRef<HTMLVideoElement>(null);
@@ -27,7 +27,6 @@ function page() {
 
         const initialize = async () => {
             try {
-                // setError(null);
                 console.log("Starting initialization...");
                 const stream = await getLocalStream(localStreamRef, setLocalStream);
                 console.log("Got local stream");
@@ -99,33 +98,20 @@ function page() {
         console.log(`Client disconnected: ${socketId}`);
         console.log(remoteStreams)
         setRemoteStreams((prevStreams) =>
-            prevStreams.filter((stream) => stream.id !== socketId)
+            prevStreams.filter((stream) =>
+                stream.socketId !== socketId && !stream.id.startsWith(socketId)
+            )
         );
     })
 
-
-    //   // Cleanup on unmount
-    //   useEffect(() => {
-    //     return () => {
-    //       console.log("Cleaning up...");
-
-    //       if (localStream) {
-    //         localStream.getTracks().forEach((track) => track.stop());
-    //       }
-    //       if (producer) {
-    //         producer.close();
-    //       }
-    //       if (producerTransport) {
-    //         producerTransport.close();
-    //       }
-    //       if (consumerTransport) {
-    //         consumerTransport.close();
-    //       }
-    //       remoteStreams.forEach(({ consumer }) => {
-    //         if (consumer) consumer.close();
-    //       });
-    //     };
-    //   }, []);
+    const groupedStreams: Record<string, RemoteStream[]>  = remoteStreams.reduce((acc, stream) => {
+        const socketId = stream.socketId || stream.id.split('-')[0];
+        if (!acc[socketId]) {
+            acc[socketId] = [];
+        }
+        acc[socketId].push(stream);
+        return acc;
+    }, {} as Record<string, any[]>);
 
     return (
         <div>
@@ -140,6 +126,7 @@ function page() {
                     ref={localStreamRef}
                     autoPlay
                     playsInline
+                    controls
                     style={{
                         width: "320px",
                         height: "240px",
@@ -150,8 +137,8 @@ function page() {
                 />
             </div>
 
-            <h3>Remote Streams ({remoteStreams.length})</h3>
-            {remoteStreams.length === 0 ? (
+            <h3>Remote Streams ({Object.keys(groupedStreams).length})</h3>
+            {Object.keys(groupedStreams).length === 0 ? (
                 <p>No other users streaming</p>
             ) : (
                 <div
@@ -161,9 +148,18 @@ function page() {
                         gap: "15px",
                     }}
                 >
-                    {remoteStreams.map((remoteStream) => (
-                        <RemoteVideo key={remoteStream.id} remoteStream={remoteStream} />
-                    ))}
+                    {Object.entries(groupedStreams).map(([socketId, streams]) => {
+                        if (!streams || streams.length === 0) return null;
+
+                        const primaryStream = streams?.[0] as RemoteStream ;
+                        return (
+                            <RemoteVideo
+                                key={socketId}
+                                remoteStream={primaryStream}
+                                allStreamsFromSameSocket={streams as RemoteStream[]}
+                            />
+                        );
+                    })}
                 </div>
             )}
         </div>

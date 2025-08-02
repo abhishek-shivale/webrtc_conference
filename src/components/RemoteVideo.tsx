@@ -3,8 +3,10 @@ import {useEffect, useRef, useState} from "react";
 
 export default function RemoteVideo({
                                         remoteStream,
+                                        allStreamsFromSameSocket = []
                                     }: {
     remoteStream: RemoteStream;
+    allStreamsFromSameSocket?: RemoteStream[];
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -21,23 +23,37 @@ export default function RemoteVideo({
             return;
         }
 
-        if (!remoteStream?.consumer) {
-            console.log("No consumer found");
-            setError("No consumer available");
+        // Collect all tracks from the same socket (both audio and video)
+        const tracks: MediaStreamTrack[] = [];
+
+        // Get the main stream's track
+        if (remoteStream?.consumer?.track) {
+            tracks.push(remoteStream.consumer.track);
+        }
+
+        // Get tracks from other streams with the same socketId
+        allStreamsFromSameSocket.forEach(stream => {
+            if (stream.id !== remoteStream.id && stream.consumer?.track) {
+                // Make sure we don't add duplicate tracks
+                const existingTrack = tracks.find(t => t.id === stream.consumer!.track.id);
+                if (!existingTrack) {
+                    tracks.push(stream.consumer.track);
+                }
+            }
+        });
+
+        if (tracks.length === 0) {
+            console.log("No tracks found");
+            setError("No tracks available");
             return;
         }
 
-        const {track} = remoteStream.consumer;
+        // Create MediaStream with all tracks
+        const mediaStream = new MediaStream(tracks);
+        video.srcObject = mediaStream;
 
-        if (!track) {
-            console.error("No track found in consumer");
-            setError("No track available");
-            return;
-        }
-
-
-        video.srcObject = new MediaStream([track]);
-
+        console.log(`Setting up video for ${remoteStream.id} with ${tracks.length} tracks:`,
+            tracks.map(t => `${t.kind}: ${t.id}`));
 
         const handleCanPlay = () => {
             console.log(`🎬 Video can play for ${remoteStream.id}`);
@@ -55,15 +71,20 @@ export default function RemoteVideo({
 
         video.addEventListener("canplay", handleCanPlay);
 
-
         return () => {
-            console.log(` Cleaning up video for ${remoteStream.id}`);
+            console.log(`Cleaning up video for ${remoteStream.id}`);
             video.removeEventListener("canplay", handleCanPlay);
-
             setIsPlaying(false);
             setError(null);
         };
-    }, [remoteStream?.consumer, remoteStream?.id]);
+    }, [remoteStream?.consumer, remoteStream?.id, allStreamsFromSameSocket]);
+
+    // Determine the media type for display
+    const mediaType = remoteStream?.consumer?.kind || "unknown";
+    const hasVideo = allStreamsFromSameSocket.some(s => s.consumer?.kind === "video") ||
+        remoteStream?.consumer?.kind === "video";
+    const hasAudio = allStreamsFromSameSocket.some(s => s.consumer?.kind === "audio") ||
+        remoteStream?.consumer?.kind === "audio";
 
     return (
         <div style={{textAlign: "center"}}>
@@ -71,6 +92,7 @@ export default function RemoteVideo({
                 ref={videoRef}
                 autoPlay
                 playsInline
+                controls={hasAudio} // Show controls if there's audio
                 style={{
                     width: "300px",
                     height: "200px",
@@ -80,9 +102,12 @@ export default function RemoteVideo({
                     }`,
                 }}
             />
-            <p>Stream from: {remoteStream?.id || "Unknown"}</p>
+            <p>Stream from: {remoteStream?.socketId || remoteStream?.id || "Unknown"}</p>
             <p style={{fontSize: "12px", color: "#666"}}>
                 Producer: {remoteStream?.producerId || "Unknown"}
+            </p>
+            <p style={{fontSize: "10px", color: "#888"}}>
+                Media: {hasVideo ? "📹" : ""} {hasAudio ? "🎵" : ""} ({mediaType})
             </p>
             <p
                 style={{

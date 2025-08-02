@@ -6,13 +6,11 @@ import {
     consume,
     createConsumerTransport,
     createProducerTransport,
-    // getHLSPlaylist,
-    // getHLSStreams,
     getProducers,
-    // hlsManager,
     produce,
     resumeConsumer,
-    rtpCapabilities, stopLive,
+    rtpCapabilities,
+    stopLive,
 } from "./events";
 import {consumers, liveConsumers, producers, transports} from "./constant";
 import {Streamer} from "@/utils/types";
@@ -85,26 +83,69 @@ export function initSocketIO(httpServer: any) {
 
         socket.on('getStreamer', async (_, callback) => {
             const streamers: Streamer[] = []
-            liveConsumers.keys().forEach((key: string) => {
-                const url = liveConsumers.get(key)?.url
+            liveConsumers.forEach((consumerData, key) => {
+                const url = consumerData.url;
                 if (!url) return;
-                streamers.push({id: key, url})
-            })
+
+                // Extract socket ID from producer key if possible
+                // This assumes the producer key format contains socket info
+                let socketId = key;
+                for (const [producerKey, producerData] of producers.entries()) {
+                    if (producerData.producerId === key) {
+                        socketId = producerKey.split('-')[0]; // Extract socket ID from "socketId-kind"
+                        break;
+                    }
+                }
+
+                streamers.push({id: socketId, url});
+            });
             callback({streamer: streamers ?? []});
         });
-        //
-        // socket.on("getHLSPlaylist", ({ producerId }, callback) => {
-        //     getHLSPlaylist(producerId, callback);
-        // });
 
         socket.on("disconnect", () => {
+            console.log(`Client ${socket.id} disconnecting, cleaning up...`);
+
+            // Stop HLS streaming
             stopLive(socket.id);
-            producers.delete(socket.id);
-            transports.delete(`${socket.id}-producer`);
-            transports.delete(`${socket.id}-consumer`);
-            consumers.delete(socket.id);
+
+            // Clean up producers for this socket (both audio and video)
+            const producersToDelete = [];
+            for (const [key, data] of producers.entries()) {
+                if (key.startsWith(`${socket.id}-`)) {
+                    console.log(`Closing producer ${data.producerId} (${data.kind}) for socket ${socket.id}`);
+                    data.producer.close();
+                    producersToDelete.push(key);
+                }
+            }
+            producersToDelete.forEach(key => producers.delete(key));
+
+            // Clean up transports
+            const producerTransport = transports.get(`${socket.id}-producer`);
+            if (producerTransport) {
+                producerTransport.close();
+                transports.delete(`${socket.id}-producer`);
+            }
+
+            const consumerTransport = transports.get(`${socket.id}-consumer`);
+            if (consumerTransport) {
+                consumerTransport.close();
+                transports.delete(`${socket.id}-consumer`);
+            }
+
+            // Clean up consumers for this socket
+            const consumersToDelete = [];
+            for (const [key, data] of consumers.entries()) {
+                if (key.startsWith(`${socket.id}-`)) {
+                    console.log(`Closing consumer ${data.consumerId} (${data.kind}) for socket ${socket.id}`);
+                    data.consumer.close();
+                    consumersToDelete.push(key);
+                }
+            }
+            consumersToDelete.forEach(key => consumers.delete(key));
+
+            // Notify other clients about disconnection
             io.emit("clientDisconnected", socket.id);
-            console.log("A client disconnected");
+            console.log(`Client ${socket.id} cleanup completed`);
         });
     });
 }

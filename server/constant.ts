@@ -8,12 +8,21 @@ export const transports = new Map<string, mediasoup.types.Transport>();
 
 export const producers = new Map<
     string,
-    { producer: mediasoup.types.Producer; producerId: string }
+    {
+        producer: mediasoup.types.Producer;
+        producerId: string;
+        kind: mediasoup.types.MediaKind;
+    }
 >();
+
 
 export const consumers = new Map<
     string,
-    { consumer: mediasoup.types.Consumer; consumerId: string }
+    {
+        consumer: mediasoup.types.Consumer;
+        consumerId: string;
+        kind: mediasoup.types.MediaKind;
+    }
 >();
 
 export const liveConsumers = new Map<
@@ -26,7 +35,6 @@ export const liveConsumers = new Map<
     }
 >
 ();
-
 
 export async function initMediasoup() {
     try {

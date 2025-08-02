@@ -235,6 +235,7 @@ export const consumeStream = async (
 
         console.log(`Starting to consume stream from producer ${producerId} (socket: ${socketId})`);
 
+        // Check if we already have a stream from this socket
         setRemoteStreams((prev) => {
             const existing = prev.find(s => s.id === socketId);
             if (existing) {
@@ -304,16 +305,45 @@ export const consumeStream = async (
             console.log(`Consumer ${consumer.id} resumed on client`);
         }
 
-        const newRemoteStream: RemoteStream = {
-            id: socketId,
-            consumer,
-            producerId: consumerData.producerId,
-        };
-
+        // Update or create the remote stream
         setRemoteStreams((prev) => {
-            const filtered = prev.filter((s) => s.id !== socketId);
-            console.log(`Adding remote stream for socket ${socketId}`);
-            return [...filtered, newRemoteStream];
+            const existingIndex = prev.findIndex(s => s.id === socketId);
+
+            if (existingIndex !== -1) {
+                // Update existing stream by adding this consumer's track
+                const existingStream = prev[existingIndex];
+                const updatedStreams = [...prev];
+
+                // If this is a different kind of media (audio/video), we need to handle it
+                if (consumer.kind !== existingStream.consumer?.kind) {
+                    // Create a new RemoteStream entry for different media types
+                    const newRemoteStream: RemoteStream = {
+                        id: `${socketId}-${consumer.kind}`, // Differentiate by media type
+                        consumer,
+                        producerId: consumerData.producerId,
+                        socketId: socketId,
+                    };
+                    return [...prev, newRemoteStream];
+                } else {
+                    // Replace with new consumer of same type
+                    updatedStreams[existingIndex] = {
+                        ...existingStream,
+                        consumer,
+                        producerId: consumerData.producerId,
+                    };
+                    return updatedStreams;
+                }
+            } else {
+                // Create new stream
+                const newRemoteStream: RemoteStream = {
+                    id: socketId,
+                    consumer,
+                    producerId: consumerData.producerId,
+                    socketId: socketId,
+                };
+                console.log(`Adding remote stream for socket ${socketId}`);
+                return [...prev, newRemoteStream];
+            }
         });
 
         console.log(`Successfully consuming stream from ${socketId}`);
@@ -381,55 +411,111 @@ export const startStreaming = async (
 ) => {
     try {
         const videoTrack = localStream.getVideoTracks()[0];
-        if (!videoTrack) {
-            new Error("No video track found");
-        }
+        const audioTrack = localStream.getAudioTracks()[0];
 
-        videoTrack.enabled = true;
+        const producers = [];
 
-        if (videoTrack.muted) {
-            console.warn("Video track is muted - this might cause issues");
+        // Handle video track
+        if (videoTrack) {
+            videoTrack.enabled = true;
 
-            const waitForUnmute = new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error("Track remained muted for too long"));
-                }, 5000);
+            if (videoTrack.muted) {
+                console.warn("Video track is muted - this might cause issues");
 
-                const handleUnmute = () => {
-                    clearTimeout(timeout);
-                    videoTrack.removeEventListener("unmute", handleUnmute);
-                    resolve();
-                };
+                const waitForUnmute = new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error("Video track remained muted for too long"));
+                    }, 5000);
 
-                if (!videoTrack.muted) {
-                    clearTimeout(timeout);
-                    resolve();
-                } else {
-                    videoTrack.addEventListener("unmute", handleUnmute);
+                    const handleUnmute = () => {
+                        clearTimeout(timeout);
+                        videoTrack.removeEventListener("unmute", handleUnmute);
+                        resolve();
+                    };
+
+                    if (!videoTrack.muted) {
+                        clearTimeout(timeout);
+                        resolve();
+                    } else {
+                        videoTrack.addEventListener("unmute", handleUnmute);
+                    }
+                });
+
+                try {
+                    await waitForUnmute;
+                    console.log("Video track is now unmuted");
+                } catch (error) {
+                    console.warn("Video track is still muted, proceeding anyway:", error);
                 }
+            }
+
+            console.log("Starting to produce video stream...");
+            const videoProducer = await producerTransport.produce({
+                track: videoTrack,
             });
 
-            try {
-                await waitForUnmute;
-                console.log("Track is now unmuted");
-            } catch (error) {
-                console.warn("Track is still muted, proceeding anyway:", error);
+            if (videoProducer.paused) {
+                videoProducer.resume();
+                console.log("Video producer resumed");
             }
+
+            producers.push(videoProducer);
+            console.log("Started video streaming with producer:", videoProducer.id);
         }
 
-        console.log("Starting to produce video stream...");
-        const newProducer = await producerTransport.produce({
-            track: videoTrack,
-        });
+        // Handle audio track
+        if (audioTrack) {
+            audioTrack.enabled = true;
 
-        if (newProducer.paused) {
-            newProducer.resume();
-            console.log("Producer resumed");
+            if (audioTrack.muted) {
+                console.warn("Audio track is muted - this might cause issues");
+
+                const waitForUnmute = new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error("Audio track remained muted for too long"));
+                    }, 5000);
+
+                    const handleUnmute = () => {
+                        clearTimeout(timeout);
+                        audioTrack.removeEventListener("unmute", handleUnmute);
+                        resolve();
+                    };
+
+                    if (!audioTrack.muted) {
+                        clearTimeout(timeout);
+                        resolve();
+                    } else {
+                        audioTrack.addEventListener("unmute", handleUnmute);
+                    }
+                });
+
+                try {
+                    await waitForUnmute;
+                    console.log("Audio track is now unmuted");
+                } catch (error) {
+                    console.warn("Audio track is still muted, proceeding anyway:", error);
+                }
+            }
+
+            console.log("Starting to produce audio stream...");
+            const audioProducer = await producerTransport.produce({
+                track: audioTrack,
+            });
+
+            if (audioProducer.paused) {
+                audioProducer.resume();
+                console.log("Audio producer resumed");
+            }
+
+            producers.push(audioProducer);
+            console.log("Started audio streaming with producer:", audioProducer.id);
         }
 
-        console.log("Started streaming with producer:", newProducer.id);
+        if (producers.length === 0) {
+            throw new Error("No tracks found to produce");
+        }
 
-        console.log("Waiting for producer to be established...");
+        console.log("Waiting for producers to be established...");
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         await getExistingProducers(consumerTransport, socket, setRemoteStreams);
