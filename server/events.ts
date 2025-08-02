@@ -1,7 +1,9 @@
-import { consumers, producers, router, transports } from "./constant";
-import { createTransport } from "./mediasoup";
+import {consumers, liveConsumers, producers, router, transports} from "./constant";
+import {createTransport} from "./mediasoup";
 import mediasoup from "mediasoup";
-
+import {spawn} from "child_process"
+import path from "path";
+import fs from "fs";
 
 export const rtpCapabilities = (callback: any) => {
     if (!router) {
@@ -13,7 +15,7 @@ export const rtpCapabilities = (callback: any) => {
         console.error("RTP capabilities not found");
         return;
     }
-    callback({ rtpCapabilities: rtpCapabilitie });
+    callback({rtpCapabilities: rtpCapabilitie});
 };
 
 export const createProducerTransport = async (callback: any, id: string) => {
@@ -39,7 +41,7 @@ export const createProducerTransport = async (callback: any, id: string) => {
         callback(transportOption);
     } catch (error) {
         console.error("Error creating producer transport:", error);
-        callback({ error: "Error creating producer transport" });
+        callback({error: "Error creating producer transport"});
     }
 };
 
@@ -62,7 +64,7 @@ export const createConsumerTransport = async (callback: any, id: string) => {
         callback(transportOption);
     } catch (error) {
         console.error("Error creating consumer transport:", error);
-        callback({ error: "Error creating consumer transport" });
+        callback({error: "Error creating consumer transport"});
     }
 };
 
@@ -77,12 +79,12 @@ export const connectProducerTransport = async (
         if (!transport) {
             throw new Error("Producer transport not found");
         }
-        await transport.connect({ dtlsParameters });
+        await transport.connect({dtlsParameters});
         console.log(`Producer transport connected successfully for socket: ${id}`);
-        callback({ success: true });
+        callback({success: true});
     } catch (error) {
         console.error("Error connecting producer transport:", error);
-        callback({ error: `Error connecting producer transport: ${error}` });
+        callback({error: `Error connecting producer transport: ${error}`});
     }
 };
 
@@ -98,14 +100,14 @@ export const connectConsumerTransport = async (
             throw new Error(`Consumer transport not found for socket: ${id}`);
         }
 
-        await transport.connect({ dtlsParameters });
+        await transport.connect({dtlsParameters});
 
         console.log(`Consumer transport connected successfully for socket: ${id}`);
 
-        callback({ success: true });
+        callback({success: true});
     } catch (error) {
         console.error(`Error connecting consumer transport for socket ${id}:`, error);
-        callback({ error: `Error connecting consumer transport: ${error}` });
+        callback({error: `Error connecting consumer transport: ${error}`});
     }
 };
 
@@ -122,8 +124,7 @@ export const produce = async (
             console.log("Producer already exists for this socket");
             const oldProducer = producers.get(socket.id);
             if (oldProducer?.producer) {
-                // Stop HLS stream for old producer
-                // hlsManager.stopHLSStream(oldProducer.producer.id);
+
                 oldProducer.producer.close();
             }
             producers.delete(socket.id);
@@ -134,7 +135,7 @@ export const produce = async (
         }
 
         console.log(`Creating producer for socket: ${socket.id}, kind: ${kind}`);
-        const producer = await transport.produce({ kind, rtpParameters });
+        const producer = await transport.produce({kind, rtpParameters});
 
         if (producer.paused) {
             await producer.resume();
@@ -143,34 +144,24 @@ export const produce = async (
 
         console.log(`Producer created: ${producer.id} for ${socket.id}`);
 
-        // Start HLS stream for this producer with delay to ensure producer is ready
-        // setTimeout(async () => {
-        //     try {
-        //         const hlsPlaylist = await hlsManager.startHLSStream(producer, router);
-        //         console.log(`HLS stream started for producer ${producer.id}: ${hlsPlaylist}`);
-        //
-        //         // Emit HLS stream info to all clients
-        //         socket.broadcast.emit("newHLSStream", {
-        //             producerId: producer.id,
-        //             socketId: socket.id,
-        //             playlist: hlsPlaylist
-        //         });
-        //     } catch (error) {
-        //         console.error('Failed to start HLS stream:', error);
-        //     }
-        // }, 1000);
 
         socket.broadcast.emit("newProducer", {
             producerId: producer.id,
             socketId: socket.id,
         });
 
-        producers.set(socket.id, { producer, producerId: producer.id });
+        producers.set(socket.id, {producer, producerId: producer.id});
+        const live = await startLive(socket);
 
-        callback({ id: producer.id });
+        socket.broadcast.emit("newStreamer", {
+            id: socket.id,
+            url: `/hls/${socket.id}/playlist.m3u8`,
+        })
+
+        callback({id: producer.id});
     } catch (error) {
         console.error("Error producing:", error);
-        callback({ error: `Error producing: ${error}` });
+        callback({error: `Error producing: ${error}`});
     }
 };
 
@@ -208,7 +199,7 @@ export const consume = async (
             throw new Error(`RTP capabilities not set on socket ${socket.id}`);
         }
 
-        const { producer } = producerData;
+        const {producer} = producerData;
         const consumerRtpCapabilities = socket.rtpCapabilities;
 
         // Check if this router can consume this producer
@@ -231,7 +222,7 @@ export const consume = async (
             rtpCapabilities: consumerRtpCapabilities as mediasoup.types.RtpCapabilities,
         });
 
-        consumers.set(socket.id, { consumer, consumerId: consumer.id });
+        consumers.set(socket.id, {consumer, consumerId: consumer.id});
 
         console.log(`Consumer created: ${consumer.id} for socket ${socket.id} (producer: ${producerId})`);
         console.log(`Consumer paused state: ${consumer.paused}`);
@@ -244,7 +235,7 @@ export const consume = async (
         });
     } catch (error) {
         console.error(`Error consuming producer ${producerId} for socket ${socket.id}:`, error);
-        callback({ error: `Error consuming: ${error}` });
+        callback({error: `Error consuming: ${error}`});
     }
 };
 
@@ -266,7 +257,7 @@ export const resumeConsumer = async (
             throw new Error(`Consumer ID mismatch. Expected: ${consumerData.consumerId}, Got: ${consumerId}`);
         }
 
-        const { consumer } = consumerData;
+        const {consumer} = consumerData;
 
         if (consumer.paused) {
             await consumer.resume();
@@ -275,10 +266,10 @@ export const resumeConsumer = async (
             console.log(`ℹConsumer ${consumerId} was already resumed for socket ${id}`);
         }
 
-        callback({ success: true });
+        callback({success: true});
     } catch (error) {
         console.error(`Error resuming consumer ${consumerId} for socket ${id}:`, error);
-        callback({ error: `Error resuming consumer: ${error}` });
+        callback({error: `Error resuming consumer: ${error}`});
     }
 };
 
@@ -301,9 +292,244 @@ export const getProducers = async (callback: any, id: string) => {
         console.log(`Returning ${producerList.length} producers for socket ${id}:`,
             producerList.map(p => `${p.producerId} (from ${p.socketId})`));
 
-        callback({ producerList });
+        callback({producerList});
     } catch (error) {
         console.error(`Error getting producers for socket ${id}:`, error);
-        callback({ error: `Error getting producers: ${error}` });
+        callback({error: `Error getting producers: ${error}`});
     }
 };
+
+
+export async function startLive(socket: any) {
+    try {
+
+        const publicDir = path.join(process.cwd(), 'public');
+        const hlsDir = path.join(publicDir, 'hls');
+        const socketDir = path.join(hlsDir, socket.id);
+
+        if (!fs.existsSync(publicDir)) {
+            fs.mkdirSync(publicDir, { recursive: true });
+        }
+
+        if (!fs.existsSync(hlsDir)) {
+            fs.mkdirSync(hlsDir, { recursive: true });
+        }
+
+        if (!fs.existsSync(socketDir)) {
+            fs.mkdirSync(socketDir, { recursive: true });
+        }
+
+        const prod = producers.get(socket.id);
+        if (!prod) {
+            throw new Error(`No producer found for socket ${socket.id}`);
+        }
+
+
+        const connection = await router.createPlainTransport({
+            listenIp: { ip: '127.0.0.1' },
+            rtcpMux: false,
+            comedia: false,
+            enableSctp: false
+        });
+
+        const routerRtpCapabilities = router.rtpCapabilities;
+
+        const consumer = await connection.consume({
+            producerId: prod.producerId,
+            paused: true,
+            rtpCapabilities: routerRtpCapabilities
+        });
+
+        liveConsumers.set(`${prod.producerId}`, {
+            consumer: consumer,
+            consumerId: consumer.id,
+            connection: connection,
+            url: `/hls/${socket.id}/playlist.m3u8`,
+        });
+
+        const ffmpegListenIp = '127.0.0.1';
+        const ffmpegListenRtpPort = Math.floor(Math.random() * (65535 - 20000)) + 20000;
+        const ffmpegListenRtcpPort = ffmpegListenRtpPort + 1;
+
+        await connection.connect({
+            ip: ffmpegListenIp,
+            port: ffmpegListenRtpPort,
+            rtcpPort: ffmpegListenRtcpPort
+        });
+
+        console.log(`Transport connected: ${ffmpegListenIp}:${ffmpegListenRtpPort}`);
+        console.log(`Consumer RTP parameters:`, {
+            payloadType: consumer.rtpParameters.codecs[0]?.payloadType,
+            mimeType: consumer.rtpParameters.codecs[0]?.mimeType,
+            clockRate: consumer.rtpParameters.codecs[0]?.clockRate
+        });
+
+        const codec = consumer.rtpParameters.codecs[0];
+        const payloadType = codec.payloadType;
+        const mimeType = codec.mimeType;
+        const clockRate = codec.clockRate;
+
+        const isVideo = prod.producer.kind === 'video';
+        const isAudio = prod.producer.kind === 'audio';
+
+        const sdpContent = `v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=MediaSoup Stream
+c=IN IP4 127.0.0.1
+t=0 0
+m=${isVideo ? 'video' : 'audio'} ${ffmpegListenRtpPort} RTP/AVP ${payloadType}
+a=rtpmap:${payloadType} ${mimeType.split('/')[1]}/${clockRate}${isAudio && codec.channels ? '/' + codec.channels : ''}
+a=sendonly
+`;
+
+        const sdpPath = path.join(socketDir, 'stream.sdp');
+        fs.writeFileSync(sdpPath, sdpContent);
+        console.log(`SDP file created at: ${sdpPath}`);
+        console.log(`SDP content:\n${sdpContent}`);
+
+        let ffmpegArgs = [
+            '-loglevel', 'debug',
+            '-protocol_whitelist', 'file,udp,rtp',
+            '-fflags', '+genpts',
+            '-thread_queue_size', '1024',
+            '-i', sdpPath,
+        ];
+
+        if (isVideo) {
+            ffmpegArgs.push(
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-tune', 'zerolatency',
+                '-profile:v', 'baseline',
+                '-level', '3.0',
+                '-pix_fmt', 'yuv420p',
+                '-r', '25',
+                '-g', '50',
+                '-keyint_min', '25',
+                '-sc_threshold', '0',
+                '-b:v', '1000k',
+                '-maxrate', '1000k',
+                '-bufsize', '2000k',
+                '-an'
+            );
+        } else if (isAudio) {
+            ffmpegArgs.push(
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '48000',
+                '-ac', '2',
+                '-vn'
+            );
+        }
+
+        ffmpegArgs.push(
+            '-f', 'hls',
+            '-hls_time', '2',
+            '-hls_list_size', '5',
+            '-hls_flags', 'delete_segments+append_list',
+            '-hls_allow_cache', '0',
+            '-hls_segment_type', 'mpegts',
+            '-hls_segment_filename', path.join(socketDir, 'segment_%03d.ts'),
+            '-start_number', '0',
+            path.join(socketDir, 'playlist.m3u8')
+        );
+
+        console.log(`Starting FFmpeg for ${isVideo ? 'video' : 'audio'} stream from socket ${socket.id}`);
+        console.log(`FFmpeg args:`, ffmpegArgs.join(' '));
+
+        const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        ffmpeg.stdout.on('data', (data) => {
+            console.log(`FFmpeg stdout [${socket.id}]: ${data.toString().trim()}`);
+        });
+
+        ffmpeg.stderr.on('data', (data) => {
+            const output = data.toString().trim();
+            console.log(`FFmpeg stderr [${socket.id}]: ${output}`);
+        });
+
+        ffmpeg.on('close', (code) => {
+            console.log(`FFmpeg process for socket ${socket.id} exited with code ${code}`);
+            const consumerData = liveConsumers.get(`${prod.producerId}`);
+            if (consumerData) {
+                consumerData.consumer?.close();
+                consumerData.connection?.close();
+                liveConsumers.delete(`${prod.producerId}`);
+            }
+        });
+
+        ffmpeg.on('error', (error) => {
+            console.error(`FFmpeg error for socket ${socket.id}:`, error);
+        });
+
+        setTimeout(async () => {
+            try {
+                console.log(`Resuming consumer for producer ${prod.producerId}`);
+                await consumer.resume();
+                console.log(`Consumer resumed successfully for socket ${socket.id}`);
+
+                setTimeout(async () => {
+                    try {
+                        const stats = await consumer.getStats();
+                        console.log(`Consumer stats for ${socket.id}:`, stats);
+                    } catch (error) {
+                        console.error(`Error getting consumer stats:`, error);
+                    }
+                }, 5000);
+
+            } catch (error) {
+                console.error(`Error resuming consumer for socket ${socket.id}:`, error);
+            }
+        }, 3000);
+
+        console.log(`HLS stream started for socket ${socket.id}`);
+        console.log(`Playlist available at: /public/hls/${socket.id}/playlist.m3u8`);
+        console.log(`RTP endpoint: ${ffmpegListenIp}:${ffmpegListenRtpPort}`);
+
+        return {
+            connection,
+            consumer,
+            ffmpeg,
+            playlistPath: `/hls/${socket.id}/playlist.m3u8`,
+            hlsDirectory: socketDir,
+            socketId: socket.id,
+            mediaType: isVideo ? 'video' : 'audio'
+        };
+
+    } catch (e) {
+        console.error('Error startLive:', e);
+        throw e;
+    }
+}
+
+export function stopLive(socketId: string) {
+    try {
+        for (const [producerId, consumerData] of liveConsumers.entries()) {
+            if (producerId.includes(socketId)) {
+                consumerData.consumer?.close();
+                consumerData.connection?.close();
+                liveConsumers.delete(producerId);
+                console.log(`Stopped live stream for socket ${socketId}`);
+                break;
+            }
+        }
+    } catch (e) {
+        console.error(`Error stopping live stream for socket ${socketId}:`, e);
+    }
+}
+
+export async function stopAllLiveStreams() {
+    try {
+        liveConsumers.forEach(({ consumer, connection }) => {
+            consumer?.close();
+            connection?.close();
+        });
+        liveConsumers.clear();
+        console.log('All live streams stopped');
+    } catch (e) {
+        console.error('Error stopping all live streams:', e);
+    }
+}
+

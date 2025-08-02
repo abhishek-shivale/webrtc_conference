@@ -1,51 +1,81 @@
-"use client"
-import { useEffect, useRef } from 'react';
-import Hls from 'hls.js';
+"use client";
+import {useContext, useEffect, useRef, useState} from "react";
+import Hls from "hls.js";
+import {SocketContext} from "@/context/socket-context";
+import {
+    getStreamer,
+    handleNewStreamer,
+    handleStreamerDisconnect,
+} from "@/app/watch/utils";
+
+interface Streamer {
+    id: string;
+    url: string;
+}
 
 export default function Watch() {
-  const videoRef = useRef<HTMLVideoElement>(null);
+    const {socket} = useContext(SocketContext);
+    const [streamer, setStreamer] = useState<Streamer[]>([]);
+    const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
-  useEffect(() => {
-    const video = videoRef.current;
-    let hls: Hls;
+    useEffect(() => {
+        async function fetchData() {
+            if (!socket) return;
+            await getStreamer(socket, setStreamer);
+            handleNewStreamer(socket, setStreamer);
+            handleStreamerDisconnect(socket, setStreamer);
+        }
 
-    const initPlayer = () => {
-      if (Hls.isSupported()) {
-        hls = new Hls({ enableWorker: true });
-        hls.loadSource('http://sample.vodobox.net/skate_phantom_flex_4k/skate_phantom_flex_4k.m3u8')
-        if(video instanceof HTMLVideoElement == false) return
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-      } 
-    };
+        fetchData();
+    }, [socket]);
 
-    const checkInterval = setInterval(() => {
-      fetch('http://sample.vodobox.net/skate_phantom_flex_4k/skate_phantom_flex_4k.m3u8')
-        .then(res => {
-          if (res.ok) {
-            clearInterval(checkInterval);
-            initPlayer();
-          }
-        })
-        .catch(console.error);
-    }, 2000);
+    useEffect(() => {
+        streamer.forEach((stream) => {
+            if (!stream.url.endsWith(".m3u8")) return;
 
-    return () => {
-      clearInterval(checkInterval);
-      if (hls) hls.destroy();
-    };
-  }, []);
+            const video = videoRefs.current.get(stream.id);
+            if (!video) return;
 
-  return (
-    <div>
-      <h1>Live Stream</h1>
-      <video 
-        ref={videoRef} 
-        controls 
-        autoPlay 
-        playsInline 
-        style={{ width: '100%' }}
-      />
-    </div>
-  );
+            if (Hls.isSupported()) {
+                const hls = new Hls({enableWorker: true});
+                hls.loadSource(stream.url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(console.error);
+                });
+
+                return () => {
+                    hls.destroy();
+                };
+            }
+        });
+    }, [streamer]);
+
+    return (
+        <div>
+            <h1>Live Streamers: {streamer.length} Live</h1>
+            {
+                streamer.length === 0 ? (
+                    <>No Streamer Streaming</>
+                ) : (
+                    streamer.map((stream) =>
+                        stream.url.endsWith(".m3u8") ? (
+                            <div key={stream.id}>
+                                <p>Streamer ID: {stream.id}</p>
+                                <video
+                                    ref={(el) => {
+                                        if (el) videoRefs.current.set(stream.id, el);
+                                    }}
+                                    controls
+                                    autoPlay
+                                    playsInline
+                                    style={{width: "20%", marginBottom: "1rem"}}
+                                />
+                            </div>
+                        ) : null
+                    )
+                )
+            }
+        </div>
+    );
 }

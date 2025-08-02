@@ -1,5 +1,5 @@
 import mediasoup from 'mediasoup';
-import { createRouter, createWorker } from './mediasoup';
+import {createRouter, createWorker} from './mediasoup';
 
 export let worker: mediasoup.types.Worker;
 export let router: mediasoup.types.Router;
@@ -15,6 +15,17 @@ export const consumers = new Map<
     string,
     { consumer: mediasoup.types.Consumer; consumerId: string }
 >();
+
+export const liveConsumers = new Map<
+    string,
+    {
+        consumer: mediasoup.types.Consumer;
+        consumerId: string;
+        connection: mediasoup.types.PlainTransport<mediasoup.types.AppData>,
+        url: string
+    }
+>
+();
 
 
 export async function initMediasoup() {

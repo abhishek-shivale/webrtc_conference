@@ -6,3 +6,8 @@ export interface RemoteStream {
     producerId?: string;
     consumer?: Consumer;
 }
+
+export type Streamer = {
+    id: string;
+    url: string;
+};

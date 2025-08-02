@@ -44,11 +44,11 @@ export default function RemoteVideo({
             video
                 .play()
                 .then(() => {
-                    console.log(`✅ Playback started for ${remoteStream.id}`);
+                    console.log(`Playback started for ${remoteStream.id}`);
                     setIsPlaying(true);
                 })
                 .catch((err) => {
-                    console.error(`❌ Failed to play video for ${remoteStream.id}:`, err);
+                    console.error(`Failed to play video for ${remoteStream.id}:`, err);
                     setError(`Playback failed: ${err.message}`);
                 });
         };
@@ -57,7 +57,7 @@ export default function RemoteVideo({
 
 
         return () => {
-            console.log(`🧹 Cleaning up video for ${remoteStream.id}`);
+            console.log(` Cleaning up video for ${remoteStream.id}`);
             video.removeEventListener("canplay", handleCanPlay);
 
             setIsPlaying(false);
@@ -71,7 +71,6 @@ export default function RemoteVideo({
                 ref={videoRef}
                 autoPlay
                 playsInline
-                muted
                 style={{
                     width: "300px",
                     height: "200px",

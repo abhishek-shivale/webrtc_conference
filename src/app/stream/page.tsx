@@ -88,7 +88,6 @@ function page() {
         };
 
         socket.on("newProducer", handleNewProducer);
-        console.log(remoteStreams)
         console.log("🎧 Listening for new producers...");
 
         return () => {
@@ -141,7 +140,6 @@ function page() {
                     ref={localStreamRef}
                     autoPlay
                     playsInline
-                    muted
                     style={{
                         width: "320px",
                         height: "240px",

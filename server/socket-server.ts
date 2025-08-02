@@ -1,4 +1,4 @@
-import { Server } from "socket.io";
+import {Server} from "socket.io";
 import mediasoup from 'mediasoup';
 import {
     connectConsumerTransport,
@@ -12,9 +12,10 @@ import {
     // hlsManager,
     produce,
     resumeConsumer,
-    rtpCapabilities,
+    rtpCapabilities, stopLive,
 } from "./events";
-import { consumers, producers, transports } from "./constant";
+import {consumers, liveConsumers, producers, transports} from "./constant";
+import {Streamer} from "@/utils/types";
 
 declare module "socket.io" {
     interface Socket {
@@ -50,27 +51,27 @@ export function initSocketIO(httpServer: any) {
 
         socket.on(
             "connectProducerTransport",
-            async ({ dtlsParameters }, callback) => {
+            async ({dtlsParameters}, callback) => {
                 connectProducerTransport(callback, dtlsParameters, socket.id);
             }
         );
 
         socket.on(
             "connectConsumerTransport",
-            async ({ dtlsParameters }, callback) => {
+            async ({dtlsParameters}, callback) => {
                 connectConsumerTransport(callback, dtlsParameters, socket.id);
             }
         );
 
-        socket.on("produce", async ({ kind, rtpParameters }, callback) => {
+        socket.on("produce", async ({kind, rtpParameters}, callback) => {
             produce(kind, rtpParameters, callback, socket);
         });
 
-        socket.on("consumer", async ({ producerId }, callback) => {
+        socket.on("consumer", async ({producerId}, callback) => {
             consume(producerId, callback, socket);
         })
 
-        socket.on("resumeConsumer", async ({ consumerId }, callback) => {
+        socket.on("resumeConsumer", async ({consumerId}, callback) => {
             resumeConsumer(consumerId, callback, socket.id);
         });
 
@@ -82,20 +83,22 @@ export function initSocketIO(httpServer: any) {
             socket.rtpCapabilities = rtpCapabilities;
         });
 
-        // socket.on("getHLSStreams", (callback) => {
-        //     getHLSStreams(callback);
-        // });
+        socket.on('getStreamer', async (_, callback) => {
+            const streamers: Streamer[] = []
+            liveConsumers.keys().forEach((key: string) => {
+                const url = liveConsumers.get(key)?.url
+                if (!url) return;
+                streamers.push({id: key, url})
+            })
+            callback({streamer: streamers ?? []});
+        });
         //
         // socket.on("getHLSPlaylist", ({ producerId }, callback) => {
         //     getHLSPlaylist(producerId, callback);
         // });
 
         socket.on("disconnect", () => {
-            // const producerData = producers.get(socket.id);
-            // if (producerData) {
-            //     hlsManager.stopHLSStream(producerData.producer.id);
-            // }
-
+            stopLive(socket.id);
             producers.delete(socket.id);
             transports.delete(`${socket.id}-producer`);
             transports.delete(`${socket.id}-consumer`);
