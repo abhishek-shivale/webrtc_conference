@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📡 MediaSoup + Next.js WebRTC Conference
 
-## Getting Started
+A real-time WebRTC broadcasting platform built using **MediaSoup**, **Next.js**, and **Node.js**. It allows one or more users to **start a live stream** and others to **watch it in real-time**.
 
-First, run the development server:
+---
+
+## 🚀 Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/abhishek-shivale/webrtc_conference.git
+cd webrtc_conference
+
+pnpm install
+
+pnpm dev:next
+
+pnpm dev:server
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🔗 Usage
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+* Navigate to [`/stream`](http://localhost:3000/stream) – to **start broadcasting**
+* Open [`/watch`](http://localhost:3000/watch) – to **watch the live broadcast**
 
-## Learn More
+You can open `/watch` in multiple tabs/devices to simulate multiple viewers.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🔁 Process and Flow
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Click the image to view or edit the full flow in Mermaid:
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[![](https://mermaid.ink/img/pako:eNrNWNtu4zYQ_RVCD4UMOIytOLajhwUCZ7NNkW2DuLsPrfvAlRiHiESqIuVcDP97h6Loi2TK8bYLNC_R5cxwZnh4ZuSlF4mYeqEn6d8F5RG9YmSek3TGEfxlJFcsYhnhCk0SRrnqIyKrS9RH_lTllKQ07zTxU5ovaK7hn2nMyFQUWfXM5TvY8h0g_yujz3s9X1-nGZ1rcHV1l4uIStlE_nw71TD974rlNFIif51xg_tVKIqEDrHKrAuwEPUxuuFMMZJAtApi_glNBOdgy0RlWeFPPnww-YRoKqInqvDNbw2sQZwAtrIKtyDoo1TkW8LkI42RL40TFlcpt4YZYHRFFyyiNlr2RtoizFU2IRn5xhJAU-kMblkDgqUoFM3vdx-v6uusHXD6XEXmd3AiSOzXPHZcIUqqaqv4cekINz201uYMo09UoVsRwSaW5EOGp-6gyYLNCbADpxpu4pd4TtUXSfPShd9xWl8qRaJHpARKyiUXLKYC0YSm8P5ArAOMJhAavAMSx0UE73_PCZeZyJWrUFFpYPE1eLWndfQa5Zv97LgZwOIugvTvCMgABagsbyeExywGT3Abq0RuXru5UG2fiWBKebyJQmSarQe38hzb43JMfYxFo0D-shZ4x1EyZS1w5eqA5U75ZBFpMdJeCro6kN8QAzVBsNDXkjMm5LZznJmk_OUT43GIZl5JtpnX1Sf8qNR2PL3XvDLKJYbT6j_R1-760RVRpG5m9BmOts7xli1AE9DJmvAJYdzFXms5zcgztzqfbev8GloWsvKplT62Sg_L5lDNIqdtZN8kBdK72o8MSl2zhPKX1uIGCmdkW1_VtsRFEuPMdk6_DGHjpMgT7eP0MZGnGOPTLCGv0CEUTs-KsXHayqiRZdRlEbPvYhTRhv9PRv3wratyP1jlMd4MKr8IxuV2dYPvmgwC12Tgcv2ulh40W_rK5bDZgA9U4WLdvCByWaQucQ4a7cji_9PmFfzb5hVsu9ppXvc0WhzdvPq9Tfc6okDGolGhH9-9gmO7V79vJq2PLyBQjM_XPdp5HGCiqmEa4V-zBILc6ALy6UuUFDEE8MxbIrcGtxBLiP5sOeirvw4mFmC7Y1Vnbg6QtT0rN2tbXpz7YziMI8KrJfx37WQr0gawpaL2UYuK2gOzXap92u08I80Aa6u2VxkG9Xu6VWTLeafileDJuth2sZZiWwg2tv4R1Hfk7PC4B1lpo_n8LfkDH5Nk_bFgxoQDJRpsiGga-vFEDFHZ1e4OM3PKUpaQ3HrZO29tJ2gismsiEFjiLMZlHJs4NGmiJ10AamVjq0KH6gEfBHrGM2Bt62ueJglNqqTMqGjHwk-U01xvAlYS-ttcf5HJfcAvmW4PaHfacouYnd5a2FQhtBQxM9eVurPrslz7mipghE7LLg882QTbXpChnkQo4UWGYGy4YrISfde4F9cQDRJMEiEpgpJuJLgVudYAF2yqRPaeCb7KQtfhgSUtA01UXmxSpbFvBd59GO9pCtUDCUl1Ic3uSK_rzXMWe6E-8l0Ptisl-tZbgp-Zpx7hE37m6cHwQcBxVzAVly8eBFdT9la-OxvoLVqBq4zwP4RIrTfQ-fmjFz6QRMJdURKs-nVt_TSHj2KaT0TBlRf2--NB6cULl96LFwb9CzzsDQe90ag3PAsG5-dd79ULTwaDAR4G44vRaDAajy7OR6uu91YuHOBRrzc-HwC8dzbonY-GXQ_OFnwMfTa_8kHFHtjcW_0DrtHMyA?type=png)](https://mermaid.live/edit#pako:eNrNWNtu4zYQ_RVCD4UMOIytOLajhwUCZ7NNkW2DuLsPrfvAlRiHiESqIuVcDP97h6Loi2TK8bYLNC_R5cxwZnh4ZuSlF4mYeqEn6d8F5RG9YmSek3TGEfxlJFcsYhnhCk0SRrnqIyKrS9RH_lTllKQ07zTxU5ovaK7hn2nMyFQUWfXM5TvY8h0g_yujz3s9X1-nGZ1rcHV1l4uIStlE_nw71TD974rlNFIif51xg_tVKIqEDrHKrAuwEPUxuuFMMZJAtApi_glNBOdgy0RlWeFPPnww-YRoKqInqvDNbw2sQZwAtrIKtyDoo1TkW8LkI42RL40TFlcpt4YZYHRFFyyiNlr2RtoizFU2IRn5xhJAU-kMblkDgqUoFM3vdx-v6uusHXD6XEXmd3AiSOzXPHZcIUqqaqv4cekINz201uYMo09UoVsRwSaW5EOGp-6gyYLNCbADpxpu4pd4TtUXSfPShd9xWl8qRaJHpARKyiUXLKYC0YSm8P5ArAOMJhAavAMSx0UE73_PCZeZyJWrUFFpYPE1eLWndfQa5Zv97LgZwOIugvTvCMgABagsbyeExywGT3Abq0RuXru5UG2fiWBKebyJQmSarQe38hzb43JMfYxFo0D-shZ4x1EyZS1w5eqA5U75ZBFpMdJeCro6kN8QAzVBsNDXkjMm5LZznJmk_OUT43GIZl5JtpnX1Sf8qNR2PL3XvDLKJYbT6j_R1-760RVRpG5m9BmOts7xli1AE9DJmvAJYdzFXms5zcgztzqfbev8GloWsvKplT62Sg_L5lDNIqdtZN8kBdK72o8MSl2zhPKX1uIGCmdkW1_VtsRFEuPMdk6_DGHjpMgT7eP0MZGnGOPTLCGv0CEUTs-KsXHayqiRZdRlEbPvYhTRhv9PRv3wratyP1jlMd4MKr8IxuV2dYPvmgwC12Tgcv2ulh40W_rK5bDZgA9U4WLdvCByWaQucQ4a7cji_9PmFfzb5hVsu9ppXvc0WhzdvPq9Tfc6okDGolGhH9-9gmO7V79vJq2PLyBQjM_XPdp5HGCiqmEa4V-zBILc6ALy6UuUFDEE8MxbIrcGtxBLiP5sOeirvw4mFmC7Y1Vnbg6QtT0rN2tbXpz7YziMI8KrJfx37WQr0gawpaL2UYuK2gOzXap92u08I80Aa6u2VxkG9Xu6VWTLeafileDJuth2sZZiWwg2tv4R1Hfk7PC4B1lpo_n8LfkDH5Nk_bFgxoQDJRpsiGga-vFEDFHZ1e4OM3PKUpaQ3HrZO29tJ2gismsiEFjiLMZlHJs4NGmiJ10AamVjq0KH6gEfBHrGM2Bt62ueJglNqqTMqGjHwk-U01xvAlYS-ttcf5HJfcAvmW4PaHfacouYnd5a2FQhtBQxM9eVurPrslz7mipghE7LLg882QTbXpChnkQo4UWGYGy4YrISfde4F9cQDRJMEiEpgpJuJLgVudYAF2yqRPaeCb7KQtfhgSUtA01UXmxSpbFvBd59GO9pCtUDCUl1Ic3uSK_rzXMWe6E-8l0Ptisl-tZbgp-Zpx7hE37m6cHwQcBxVzAVly8eBFdT9la-OxvoLVqBq4zwP4RIrTfQ-fmjFz6QRMJdURKs-nVt_TSHj2KaT0TBlRf2--NB6cULl96LFwb9CzzsDQe90ag3PAsG5-dd79ULTwaDAR4G44vRaDAajy7OR6uu91YuHOBRrzc-HwC8dzbonY-GXQ_OFnwMfTa_8kHFHtjcW_0DrtHMyA)

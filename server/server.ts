@@ -10,8 +10,10 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
 const port = parseInt(process.env.PORT || '3002', 10);
 
-const key = fs.readFileSync('/Users/abhishekshivale/Developer/webrtc/certificates/localhost-key.pem');
-const cert = fs.readFileSync('/Users/abhishekshivale/Developer/webrtc/certificates/localhost.pem');
+const pathCert = path.resolve(__dirname, '..', 'certificates');
+
+const key = fs.readFileSync(path.join(pathCert, 'localhost-key.pem'));
+const cert = fs.readFileSync(path.join(pathCert, 'localhost.pem'));
 
 const options = {
     key,
