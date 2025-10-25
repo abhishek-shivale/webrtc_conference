@@ -110,6 +110,7 @@ export const produceProducer = async (
     }
 };
 
+// a webrtc send transport on the client side using mediasoup client
 export const createProducerTransport = async (
     device: Device,
     socket: Socket

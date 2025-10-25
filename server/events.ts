@@ -124,10 +124,8 @@ export const produce = async (
             throw new Error("Producer transport not found");
         }
 
-        // Create a unique key for this producer (socket + kind)
         const producerKey = `${socket.id}-${kind}`;
 
-        // Close existing producer of the same kind if it exists
         if (producers.has(producerKey)) {
             console.log(`Producer already exists for ${producerKey}, closing old one`);
             const oldProducer = producers.get(producerKey);
@@ -294,16 +292,14 @@ export const getProducers = async (callback: any, id: string) => {
     try {
         console.log(`Getting producers list for socket ${id}`);
 
-        // Get all producers except those from the requesting socket
         const producerList = Array.from(producers.entries())
             .filter(([key, data]) => {
-                // Extract socket ID from the key (format: socketId-kind)
                 const socketId = key.split('-')[0];
                 return socketId !== id;
             })
             .map(([key, data]) => ({
                 producerId: data.producerId,
-                socketId: key.split('-')[0], // Extract socket ID from key
+                socketId: key.split('-')[0],
                 kind: data.kind
             }));
 
@@ -323,6 +319,10 @@ export async function startLive(socket: any) {
         const hlsDir = path.join(publicDir, 'hls');
         const socketDir = path.join(hlsDir, socket.id);
 
+        let a = producers;
+        let b = consumers;
+        let c = transports
+
         if (!fs.existsSync(publicDir)) {
             fs.mkdirSync(publicDir, { recursive: true });
         }
@@ -335,7 +335,6 @@ export async function startLive(socket: any) {
             fs.mkdirSync(socketDir, { recursive: true });
         }
 
-        // Look for video producer
         const videoProducerKey = `${socket.id}-video`;
         const videoProd = producers.get(videoProducerKey);
 

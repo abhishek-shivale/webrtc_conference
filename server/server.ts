@@ -4,7 +4,7 @@ import next from 'next';
 import fs from 'fs';
 import path from 'path';
 import { initSocketIO } from './socket-server';
-import { initMediasoup } from './constant';
+import {consumers, initMediasoup, producers, transports} from './constant';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
